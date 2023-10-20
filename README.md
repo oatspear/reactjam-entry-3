@@ -23,7 +23,7 @@ npm install
 The following command builds the final distribution (the one the should be uploaded). The code is placed in the `dist` directory.
 
 ```
-yarn build
+npm build
 ```
 
 ## Test
