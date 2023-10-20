@@ -426,42 +426,22 @@ function trySpawnMinion(
   // can this player spawn minions on this tile?
   const tile: Tile = game.tiles[where];
   if (tile.owner != PlayerIndex.NONE && tile.owner != player.index) { return false }
-  // try to place the minion on the battlefield
-  if (!placeMinionOnBattlefield(game, minion, where, true)) { return false }
-  console.log("Minion Spawned:", minion)
+  // place the minion on the battlefield
+  switch (minion) {
+    case MinionType.POWER:
+      tile.power++;
+      break;
+    case MinionType.SPEED:
+      tile.speed++;
+      break;
+    case MinionType.TECHNICAL:
+      tile.technical++;
+      break;
+  }
   // register the minion and the event
   player.resources--;
+  console.log("Minion Spawned:", minion)
   emitMinionSpawned(game.events, minion, where);
-  return true;
-}
-
-
-function placeMinionOnBattlefield(
-  game: GameState,
-  minion: Minion,
-  at: number,
-  spawn: boolean = false
-): boolean {
-  if (minion == null) { return false }
-  // is the tile free?
-  const tile: Tile = game.battlefield.tiles[at];
-  console.log("Tile occupied?", !!tile.minion)
-  if (!!tile.minion) { return false }
-  // is a spawn point required?
-  if (spawn) {
-    console.log("Spawn Point?", tile.type === TileType.SPAWN)
-    console.log("Tile owner:", tile.owner)
-    console.log("Minion owner:", minion.owner)
-    // is the tile a spawn point?
-    if (tile.type != TileType.SPAWN) { return false }
-    // is the spawn point owned by the same player?
-    if (tile.owner != minion.owner) { return false }
-  }
-  const uid = minion.uid;
-  tile.minion = uid;
-  // minion.location = BoardLocation.BATTLEFIELD;
-  minion.position = at;
-  // emitMinionEnteredBattlefield(game, uid, tile);
   return true;
 }
 
