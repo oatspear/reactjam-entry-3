@@ -1,0 +1,158 @@
+.player-action-bar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-action-bar > .switch-controls {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+}
+
+/******************************************************************************/
+/* Deck Switch */
+/******************************************************************************/
+
+.player-action-bar > .switch-controls > .button-label {
+  min-width: 96px;
+  min-height: 32px;
+  font-size: 2rem;
+  line-height: 1;
+  vertical-align: middle;
+  display: inline-block;
+  padding: 0.5rem;
+  cursor: pointer;
+  color: #292929;
+  border-radius: 0.25em;
+  background: #efefef;
+  transition: 0.3s;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+      -ms-user-select: none;
+          user-select: none;
+}
+
+.player-action-bar > .switch-controls > .button-label:hover {
+  background: #d6d6d6;
+  color: #101010;
+}
+
+#button-tech-deck:checked + .button-label {
+  background: #2ECC71;
+  color: #efefef;
+}
+
+#button-tech-deck:checked + .button-label:hover {
+  background: #29b765;
+  color: #e2e2e2;
+}
+
+#button-minion-deck:checked + .button-label {
+  background: #D91E18;
+  color: #efefef;
+}
+
+#button-minion-deck:checked + .button-label:hover {
+  background: #c21b15;
+  color: #e2e2e2;
+}
+
+
+/******************************************************************************/
+/* Player Switch */
+/******************************************************************************/
+
+.player-action-bar > .switch-controls > .player-switch {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-end;
+  position: relative;
+  cursor: pointer;
+}
+
+.player-switch > .flag {
+  width: 32px;
+  height: 32px;
+  position: absolute;
+  top: 0;
+}
+
+.player-switch > .flag:first-child {
+  left: -16px;
+}
+
+.player-switch > .flag:last-child {
+  right: -16px;
+}
+
+.player-switch > .player-avatar {
+  width: 68px;
+  height: 68px;
+  background-image: url("../assets/avatar-placeholder.png");
+  background-origin: content-box;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  border-radius: 50%;
+  border: 2px solid black;
+}
+
+.player-switch > .player-avatar:hover {
+  border: 2px solid lightgray;
+}
+
+.player-switch > .player-avatar > img {
+  width: 64px;
+  height: 64px;
+}
+
+/******************************************************************************/
+/* Deck Display */
+/******************************************************************************/
+
+.player-action-bar > .roster {
+  width: 100%;
+  height: 80px;  /* 64+8+8 */
+  padding: 8px 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.roster > .item {
+  width: 48px;
+  height: 100%;
+  background-color: chocolate;
+  border: 1px solid brown;
+  cursor: pointer;
+  user-select: none;
+}
+
+.roster > .item:hover {
+  background-color: goldenrod;
+  border: 1px solid salmon;
+}
+
+
+/******************************************************************************/
+/* Action Bars - Common */
+/******************************************************************************/
+
+
+.button-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.action-button {
+  height: 32px;
+  font-size: 1.5rem;
+  flex-basis: 22.5%;
+  background-color: ivory;
+}

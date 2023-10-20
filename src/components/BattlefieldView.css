@@ -1,0 +1,8 @@
+.battlefield {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, auto);
+  gap: 2px;
+  grid-auto-rows: minmax(64px, auto);
+  background-color: #dedede;
+}

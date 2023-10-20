@@ -1,0 +1,44 @@
+.player-status-bar {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.player-status-bar > .status-labels {
+  min-width: 328px;  /* 64*5 + 2*4 */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0.25rem 0;
+  color: white;
+  background-color: #333333;
+}
+
+.status-labels > span {
+  font-size: 1rem;
+  font-weight: bold;
+  line-height: 1.25;
+}
+
+/*
+.status-labels > span > img {
+  width: 16px;
+  height: 16px;
+}
+*/
+
+.player-status-bar > .nameplate {
+  display: inline-block;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  font-weight: bold;
+  line-height: 1.25;
+  padding: 0.25rem 0.5rem;
+  overflow: hidden;
+  border: 1px solid black;
+  margin: 0;
+}

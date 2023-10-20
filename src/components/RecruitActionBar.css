@@ -1,0 +1,57 @@
+/******************************************************************************/
+/* Common */
+/******************************************************************************/
+
+span.stat-badge {
+  font-weight: bold;
+}
+
+span.stat-badge.negative {
+  color: firebrick;
+}
+
+/******************************************************************************/
+/* Minion Roster */
+/******************************************************************************/
+
+
+/******************************************************************************/
+/* Minion Details */
+/******************************************************************************/
+
+.action-bar-check {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-bar-check > .details {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.action-bar-check > .details > .portrait {
+  width: 64px;
+  height: 64px;
+  background-color: azure;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.action-bar-check > .details > .stats {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+}
+
+.action-bar-check > .details > .stats > .base-stats {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+}

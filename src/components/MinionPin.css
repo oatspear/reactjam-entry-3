@@ -1,0 +1,15 @@
+.minion {
+  width: 32px;
+  height: 16px;
+  background-color: #494949;
+  position: relative;
+  border-radius: 50%;
+}
+
+.minion > img {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  right: 0;
+  margin: auto;
+}
