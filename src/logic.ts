@@ -14,8 +14,8 @@ export const MAX_MOVEMENT: number = 3;
 
 const BOARD_NUM_COLUMNS: number = 5;
 const INITIAL_RESOURCES: number = 1;
-const MAX_BENCH_SIZE: number = 6;
-const GRAVEYARD_SIZE: number = 2;
+const INITIAL_ARMY: number = 6;
+const UNUSABLE_TILE: number = 12;
 
 
 export enum GameplayPhase {
@@ -23,25 +23,12 @@ export enum GameplayPhase {
   INPUT_MOVEMENT,
 }
 
-
-export enum BoardLocation {
-  NONE = 0,
-  BENCH,
-  BATTLEFIELD,
-  GRAVEYARD
-}
-
-export enum TileType {
-  UNPATHABLE = 0,
-  NORMAL,
-  SPAWN,
-  BASE,
-}
-
 export enum PlayerIndex {
   NONE = -1,
   PLAYER1 = 0,
   PLAYER2 = 1,
+  PLAYER3 = 2,
+  PLAYER4 = 3,
 }
 
 export enum CombatResult {
@@ -68,90 +55,6 @@ function removeItem<T>(array: Array<T>, value: T): Array<T> {
 
 
 // -----------------------------------------------------------------------------
-// Player Deck
-// -----------------------------------------------------------------------------
-
-
-export interface Deck {
-  id: number;
-  minions: number[];
-  spells: number[];
-}
-
-
-function newDeck(id: number): Deck {
-  return { id, minions: [], spells: [] };
-}
-
-
-// -----------------------------------------------------------------------------
-// Minion Data
-// -----------------------------------------------------------------------------
-
-
-export interface MinionData {
-  species: number;
-  power: number;
-  health: number;
-  movement: number;
-  cost: number;
-}
-
-
-function newMinionData(species: number): MinionData {
-  return {
-    species,
-    power: 1,
-    health: 1,
-    movement: 1,
-    cost: 0,
-  };
-}
-
-
-// -----------------------------------------------------------------------------
-// Battle Minion State
-// -----------------------------------------------------------------------------
-
-
-export interface Minion {
-  uid: number;
-  owner: PlayerIndex;
-  // species: number;
-  baseData: MinionData;
-  power: number;
-  health: number;
-  movement: number;
-  cost: number;
-  // location: BoardLocation;
-  position: number;
-  isToken: boolean;
-}
-
-
-function newMinion(
-  uid: number,
-  owner: number,
-  baseData: MinionData,
-  isToken: boolean = false
-): Minion {
-  return {
-    uid,
-    owner,
-    baseData,
-    // species: data.species,
-    power: baseData.power,
-    health: baseData.health,
-    movement: baseData.movement,
-    cost: baseData.cost,
-    // location: BoardLocation.BENCH,
-    position: -1,
-    isToken,
-  };
-}
-
-
-// -----------------------------------------------------------------------------
 // Tile State
 // -----------------------------------------------------------------------------
 
@@ -159,28 +62,20 @@ function newMinion(
 export interface Tile {
   // adjacent: Array = []
   index: number;
-  type: TileType;
   owner: PlayerIndex;
-  minion: number;
+  power: number;
+  speed: number;
+  technical: number;
 }
 
 
 function newTile(index: number): Tile {
   return {
     index,
-    type: TileType.NORMAL,
     owner: PlayerIndex.NONE,
-    minion: 0,
-  };
-}
-
-
-function newBaseTile(index: number, owner: PlayerIndex): Tile {
-  return {
-    index,
-    type: TileType.BASE,
-    owner,
-    minion: 0,
+    power: 0,
+    speed: 0,
+    technical: 0,
   };
 }
 
@@ -188,19 +83,10 @@ function newBaseTile(index: number, owner: PlayerIndex): Tile {
 function newSpawnTile(index: number, owner: PlayerIndex): Tile {
   return {
     index,
-    type: TileType.SPAWN,
     owner,
-    minion: 0,
-  };
-}
-
-
-function newUnpathableTile(index: number): Tile {
-  return {
-    index,
-    type: TileType.UNPATHABLE,
-    owner: PlayerIndex.NONE,
-    minion: 0,
+    power: 1,
+    speed: 1,
+    technical: 1,
   };
 }
 
@@ -209,59 +95,46 @@ function newUnpathableTile(index: number): Tile {
 // Board State
 // -----------------------------------------------------------------------------
 
-
-export interface Battlefield {
-  tiles: Tile[];
-  minions: Record<number, Minion>;
-}
-
-
-// With this board layout we can assume that, for movement speed N <= 3,
-// there is, at most, one possible path between any two tiles.
-
-// [S o B o S]
-// [o   o   o]
-// [R o R o R]
-// [o   o   o]
-// [S o B o S]
+// [♥ ■ ■ ■ ♦]
+// [■ ■ ■ ■ ■]
+// [■ ■   ■ ■]
+// [■ ■ ■ ■ ■]
+// [♣ ■ ■ ■ ♠]
 
 
-function newBattlefield(): Battlefield {
-  return {
-    minions: {},
-    tiles: [
-      // row 1
-      newSpawnTile(0, PlayerIndex.PLAYER1),
-      newTile(1),
-      newBaseTile(2, PlayerIndex.PLAYER1),
-      newTile(3),
-      newSpawnTile(4, PlayerIndex.PLAYER1),
-      // row 2
-      newTile(5),
-      newUnpathableTile(6),
-      newTile(7),
-      newUnpathableTile(8),
-      newTile(9),
-      // row 3
-      newTile(10),
-      newTile(11),
-      newTile(12),
-      newTile(13),
-      newTile(14),
-      // row 4
-      newTile(15),
-      newUnpathableTile(16),
-      newTile(17),
-      newUnpathableTile(18),
-      newTile(19),
-      // row 5
-      newSpawnTile(20, PlayerIndex.PLAYER2),
-      newTile(21),
-      newBaseTile(22, PlayerIndex.PLAYER2),
-      newTile(23),
-      newSpawnTile(24, PlayerIndex.PLAYER2),
-    ],
-  };
+function newBattlefield(): Tile[] {
+  return [
+    // row 1
+    newSpawnTile(0, PlayerIndex.PLAYER1),
+    newTile(1),
+    newTile(2),
+    newTile(3),
+    newSpawnTile(4, PlayerIndex.PLAYER3),
+    // row 2
+    newTile(5),
+    newTile(6),
+    newTile(7),
+    newTile(8),
+    newTile(9),
+    // row 3
+    newTile(10),
+    newTile(11),
+    newTile(12),  // unusable
+    newTile(13),
+    newTile(14),
+    // row 4
+    newTile(15),
+    newTile(16),
+    newTile(17),
+    newTile(18),
+    newTile(19),
+    // row 5
+    newSpawnTile(20, PlayerIndex.PLAYER4),
+    newTile(21),
+    newTile(22),
+    newTile(23),
+    newSpawnTile(24, PlayerIndex.PLAYER2),
+  ];
 }
 
 
@@ -269,7 +142,7 @@ function newBattlefield(): Battlefield {
 // Assumes there is at most one possible path.
 // Assumes valid tile indices.
 // Returns an empty array if there is no possible path.
-export function getPath(battlefield: Battlefield, i: number, j: number, n: number): number[] {
+export function getPath(i: number, j: number, n: number): number[] {
   // const paths: Record<number, number[]> = getPaths(battlefield, i, n);
   // return paths[j] || [];
 
@@ -298,8 +171,7 @@ export function getPath(battlefield: Battlefield, i: number, j: number, n: numbe
       k++;
     }
     // is the new tile traversable?
-    const tile: Tile = battlefield.tiles[k];
-    if (tile.type === TileType.UNPATHABLE) { return [] }
+    if (k === UNUSABLE_TILE) { return [] }
     // if (!!tile.minion) { return [] }
     path.push(k);
     // have we reached the target?
@@ -317,11 +189,11 @@ export function getPath(battlefield: Battlefield, i: number, j: number, n: numbe
 // Assumes valid tile indices.
 // Returns an empty array if there is no possible path.
 // Also returns an empty array if there are minions along the path.
-export function getFreePath(battlefield: Battlefield, i: number, j: number, n: number): number[] {
-  const path: number[] = getPath(battlefield, i, j, n);
+export function getFreePath(tiles: Tile[], i: number, j: number, n: number): number[] {
+  const path: number[] = getPath(i, j, n);
   for (const k of path) {
-    const tile: Tile = battlefield.tiles[k];
-    if (!!tile.minion) { return [] }
+    const tile: Tile = tiles[k];
+    if (!!tile.power || !!tile.speed || !!tile.technical) { return [] }
   }
   return path;
 }
@@ -329,29 +201,29 @@ export function getFreePath(battlefield: Battlefield, i: number, j: number, n: n
 
 // Given a `battlefield`, a tile number `i` and a movement capacity `n`,
 // calculate which tiles are reachable from `i`.
-export function getReach(battlefield: Battlefield, i: number, n: number): number[] {
+export function getReach(tiles: Tile[], i: number, n: number): number[] {
   if (n <= 0) { return [] }
   let reachable: number[] = [i];
-  buildReach(battlefield, reachable, i, n);
+  buildReach(tiles, reachable, i, n);
   removeItem(reachable, i);
   return reachable;
 }
 
 
-function buildReach(battlefield: Battlefield, reach: number[], i: number, n: number): void {
+function buildReach(tiles: Tile[], reach: number[], i: number, n: number): void {
   if (n <= 0) { return }
-  const adjacent: number[] = getAdjacentTiles(battlefield, i);
+  const adjacent: number[] = getAdjacentTiles(tiles, i);
   for (const k of adjacent) {
     // already visited?
     if (reach.includes(k)) { continue }
-    const tile: Tile = battlefield.tiles[k];
+    const tile: Tile = tiles[k];
     // is this tile pathable?
-    if (tile.type == TileType.UNPATHABLE) { continue }
+    if (k == UNUSABLE_TILE) { continue }
     // is it already occupied?
-    if (!!tile.minion) { continue }
+    if (!!tile.power || !!tile.speed || !!tile.technical) { continue }
     // reachable, keep going
     reach.push(k);
-    buildReach(battlefield, reach, k, n-1);
+    buildReach(tiles, reach, k, n-1);
   }
 }
 
@@ -359,8 +231,8 @@ function buildReach(battlefield: Battlefield, reach: number[], i: number, n: num
 // Returns all possible adjacent tile numbers,
 // given a `battlefield` and a tile number `i`.
 // Does not perform occupancy checks, just board boundary checks.
-function getAdjacentTiles(battlefield: Battlefield, i: number): number[] {
-  const n = battlefield.tiles.length;
+function getAdjacentTiles(tiles: Tile[], i: number): number[] {
+  const n = tiles.length;
   const rows = (n / BOARD_NUM_COLUMNS) | 0;
   const maxRow = rows - 1;
   const maxColumn = BOARD_NUM_COLUMNS - 1;
@@ -384,24 +256,6 @@ function getAdjacentTiles(battlefield: Battlefield, i: number): number[] {
 }
 
 
-function getAdjacentEnemies(game: GameState, i: number): number[] {
-  let uid: number = game.battlefield.tiles[i].minion;
-  let minion: Minion | undefined = game.battlefield.minions[uid];
-  const enemies: number[] = [];
-  if (minion != null) {
-    const pi = minion.owner;
-    for (const k of getAdjacentTiles(game.battlefield, i)) {
-      uid = game.battlefield.tiles[k].minion;
-      minion = game.battlefield.minions[uid];
-      if (minion != null && minion.owner != pi) {
-        enemies.push(k);
-      }
-    }
-  }
-  return enemies;
-}
-
-
 // -----------------------------------------------------------------------------
 // Player State
 // -----------------------------------------------------------------------------
@@ -410,15 +264,12 @@ function getAdjacentEnemies(game: GameState, i: number): number[] {
 export interface PlayerState {
   id: string;
   index: PlayerIndex;
-  deck: Deck;
   resources: number;
-  bench: MinionData[];
-  graveyard: MinionData[];
 }
 
 
-function newPlayerState(id: string, index: PlayerIndex, deck: Deck): PlayerState {
-  return { id, index, deck, resources: INITIAL_RESOURCES, bench: [], graveyard: [] };
+function newPlayerState(id: string, index: PlayerIndex): PlayerState {
+  return { id, index, resources: INITIAL_RESOURCES };
 }
 
 
