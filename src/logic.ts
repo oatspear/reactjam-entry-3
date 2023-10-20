@@ -23,6 +23,21 @@ export enum GameplayPhase {
   INPUT_MOVEMENT,
 }
 
+export enum MinionType {
+  POWER = 1,
+  SPEED = 2,
+  TECHNICAL = 3,
+}
+
+export enum Formation {
+  POWER_SPEED_TECHNICAL = 1,
+  POWER_TECHNICAL_SPEED,
+  SPEED_POWER_TECHNICAL,
+  SPEED_TECHNICAL_POWER,
+  TECHNICAL_POWER_SPEED,
+  TECHNICAL_SPEED_POWER,
+}
+
 export enum PlayerIndex {
   NONE = -1,
   PLAYER1 = 0,
@@ -265,44 +280,12 @@ export interface PlayerState {
   id: string;
   index: PlayerIndex;
   resources: number;
+  formation: Formation;
 }
 
 
 function newPlayerState(id: string, index: PlayerIndex): PlayerState {
-  return { id, index, resources: INITIAL_RESOURCES };
-}
-
-
-// Prepares the players to have a valid initial battle state.
-function setupPlayers(game: GameState): void {
-  for (const player of game.players) {
-    // FIXME: initialize decks
-    player.deck.minions.push(1);
-    player.deck.minions.push(1);
-    player.deck.minions.push(1);
-    // initialize benched minions
-    const bench: MinionData[] = [];
-    for (const speciesId of player.deck.minions) {
-      const species = newMinionData(speciesId);
-      bench.push(species);
-      // const uid: number = ++game.minionIdGenerator;
-      // const minion = newMinion(uid, player.index, species);
-      // bench.push(minion);
-    }
-    player.bench = bench;
-    // empty graveyard
-    player.graveyard.length = 0;
-    // second player gets an extra resource
-    player.resources = INITIAL_RESOURCES + player.index;
-  }
-}
-
-
-function getPlayerMinionData(player: PlayerState, speciesId: number): MinionData | null {
-  for (const id of player.deck.minions) {
-    if (id === speciesId) { return newMinionData(speciesId) }
-  }
-  return null
+  return { id, index, resources: INITIAL_RESOURCES, formation: Formation.POWER_SPEED_TECHNICAL };
 }
 
 
@@ -316,20 +299,17 @@ type EventQueue = Record<string, number>[];
 
 export interface GameState {
   phase: GameplayPhase;
+  currentPlayer: number;
   turnsTaken: number;
   timer: number;
-  battlefield: Battlefield;
+  tiles: Tile[];
   players: PlayerState[];
   events: EventQueue;
-
-  minionIdGenerator: number;
-  // minions: Record<number, Minion>;
-  currentPlayer: number;
 }
 
 
 export function getPlayerIndex(game: GameState, playerId: string | undefined): PlayerIndex {
-  if (playerId == null) { return PlayerIndex.NONE }
+  if (!playerId) { return PlayerIndex.NONE }
   for (const player of game.players) {
     if (player.id === playerId) {
       return player.index;
@@ -404,20 +384,18 @@ function emitMinionSpawned(events: EventQueue, minion: number, tile: number): vo
 // -----------------------------------------------------------------------------
 
 
-function trySpawnMoveCommand(
+function trySpawnCommand(
   game: GameState,
   playerId: string,
-  benchIndex: number,
-  spawnPoint: number,
-  moveTo: number
+  minion: MinionType,
+  where: number
 ): boolean {
   const player: PlayerState = game.players[game.currentPlayer];
   console.log("Current player:", player.id)
   console.log("Action player:", playerId)
   console.log("Game Phase:", game.phase)
-  console.log("Bench Index:", benchIndex)
-  console.log("Spawn Point:", spawnPoint)
-  console.log("Move To:", moveTo)
+  console.log("Minion Type:", minion)
+  console.log("Spawn Point:", where)
   // is it the player's turn?
   if (player.id != playerId) { return false }
   console.log("Check 1")
@@ -425,61 +403,36 @@ function trySpawnMoveCommand(
   if (game.phase != GameplayPhase.INPUT_ANY) { return false }
   console.log("Check 2")
   // is the tile index valid?
-  const n = game.battlefield.tiles.length;
-  if (spawnPoint < 0 || spawnPoint >= n) { return false }
+  const n = game.tiles.length;
+  if (where < 0 || where >= n || where === UNUSABLE_TILE) { return false }
   console.log("Check 3")
-  // is the tile index valid?
-  if (moveTo < 0 || moveTo >= n) { return false }
+  // does the player control the tile?
+  if (game.tiles[where].owner != player.index) { return false }
   console.log("Check 4")
-  // does the player have this minion on the bench?
-  const species: MinionData | null = removeFromBench(player, benchIndex);
-  if (species == null) { return false }
-  console.log("Check 5")
   // try to spawn the minion
-  const minion: Minion | null = trySpawnMinion(game, player, species, spawnPoint);
-  if (minion == null) {
-    // rollback
-    addToBench(player, species);
-    return false;
-  }
-  console.log("Check 6")
-  // minions have 1 less movement when they spawn
-  minion.movement--;
-  // try to move the minion to the desired spot
-  if (!tryAttackMove(game, minion, moveTo)) {
-    // rollback
-    removeFromBattle(game, minion, false);
-    placeMinionOnBench(game, minion);
-    return false;
-  }
-  console.log("Check 7")
-  // clean up
-  minion.movement++;
-  return true;
+  return trySpawnMinion(game, player, minion, where);
 }
 
 
 function trySpawnMinion(
   game: GameState,
   player: PlayerState,
-  species: MinionData,
-  at: number
-): Minion | null {
+  minion: MinionType,
+  where: number
+): boolean {
   console.log("Player Resources:", player.resources)
-  console.log("Minion Cost:", species.cost)
   // does the player have enough resources?
-  if (player.resources < species.cost) { return null }
-  // generate minion
-  const uid: number = ++game.minionIdGenerator;
-  const minion: Minion = newMinion(uid, player.index, species);
-  // try to place it on the battlefield
-  if (!placeMinionOnBattlefield(game, minion, at, true)) { return null }
-  console.log("Minion UID:", uid)
+  if (player.resources <= 0) { return false }
+  // can this player spawn minions on this tile?
+  const tile: Tile = game.tiles[where];
+  if (tile.owner != PlayerIndex.NONE && tile.owner != player.index) { return false }
+  // try to place the minion on the battlefield
+  if (!placeMinionOnBattlefield(game, minion, where, true)) { return false }
+  console.log("Minion Spawned:", minion)
   // register the minion and the event
-  player.resources -= species.cost;
-  game.battlefield.minions[uid] = minion;
-  emitMinionSpawned(game.events, uid, at);
-  return minion;
+  player.resources--;
+  emitMinionSpawned(game.events, minion, where);
+  return true;
 }
 
 
@@ -806,12 +759,14 @@ function killMinion(game: GameState, minion: Minion): void {
 type MoveActionPayload = {
   from: number;
   to: number;
+  power: number;
+  speed: number;
+  technical: number;
 };
 
 type SpawnActionPayload = {
-  benchIndex: number;
-  spawnPoint: number;
-  moveTo: number;
+  what: MinionType;
+  where: number;
 };
 
 
@@ -836,24 +791,22 @@ Rune.initLogic({
   maxPlayers: 2,
 
   setup(allPlayerIds): GameState {
-    const players: PlayerState[] = [newPlayerState(allPlayerIds[0], PlayerIndex.PLAYER1, newDeck(1))];
+    const players: PlayerState[] = [newPlayerState(allPlayerIds[0], PlayerIndex.PLAYER1)];
     if (allPlayerIds.length > 1) {
-      players.push(newPlayerState(allPlayerIds[1], PlayerIndex.PLAYER2, newDeck(2)));
+      players.push(newPlayerState(allPlayerIds[1], PlayerIndex.PLAYER2));
     } else {
-      players.push(newPlayerState("AI", PlayerIndex.PLAYER2, newDeck(2)))
+      players.push(newPlayerState("AI", PlayerIndex.PLAYER2))
     }
     const game: GameState = {
       phase: GameplayPhase.INPUT_ANY,
       turnsTaken: 0,
       timer: TIME_PER_TURN,
-      battlefield: newBattlefield(),
+      tiles: newBattlefield(),
       players,
       events: [],
-      minionIdGenerator: 0,
       // minions: {},
       currentPlayer: PlayerIndex.PLAYER1,
     };
-    setupPlayers(game);
     emitInputRequired(game.events, PlayerIndex.PLAYER1);
     return game;
   },
@@ -886,11 +839,11 @@ Rune.initLogic({
       emitInputRequired(game.events, game.currentPlayer);
     },
 
-    spawn({ benchIndex, spawnPoint, moveTo }, { game, playerId }) {
+    spawn({ what, where }, { game, playerId }) {
       // empty the event queue
       game.events = [];
       // try to execute the command
-      const success = trySpawnMoveCommand(game, playerId, benchIndex, spawnPoint, moveTo);
+      const success = trySpawnCommand(game, playerId, what, where);
       if (success) {
         // transition to the next player, ask for new input
         // swapTurns(game);
