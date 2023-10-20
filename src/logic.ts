@@ -380,53 +380,56 @@ function emitMinionSpawned(events: EventQueue, minion: number, tile: number): vo
 
 
 // -----------------------------------------------------------------------------
-// Game Logic - Spawning
+// Game Logic - Deploying
 // -----------------------------------------------------------------------------
 
 
-function trySpawnCommand(
+function prevalidateDeployCommand(
   game: GameState,
   playerId: string,
   minion: MinionType,
   where: number
-): boolean {
+): PlayerState {
   const player: PlayerState = game.players[game.currentPlayer];
   console.log("Current player:", player.id)
   console.log("Action player:", playerId)
   console.log("Game Phase:", game.phase)
   console.log("Minion Type:", minion)
   console.log("Spawn Point:", where)
+  console.log("Player Resources:", player.resources)
   // is it the player's turn?
-  if (player.id != playerId) { return false }
-  console.log("Check 1")
-  // can the player issue spawn commands?
-  if (game.phase != GameplayPhase.INPUT_ANY) { return false }
-  console.log("Check 2")
+  if (player.id != playerId) { throw Rune.invalidAction() }
+  console.log("Deploy Check 1")
+  // can the player issue deploy commands?
+  if (game.phase != GameplayPhase.INPUT_ANY) { throw Rune.invalidAction() }
+  console.log("Deploy Check 2")
   // is the tile index valid?
   const n = game.tiles.length;
-  if (where < 0 || where >= n || where === UNUSABLE_TILE) { return false }
-  console.log("Check 3")
+  if (where < 0 || where >= n || where === UNUSABLE_TILE) { throw Rune.invalidAction() }
+  console.log("Deploy Check 3")
+  // does the player have enough resources?
+  if (player.resources <= 0) { throw Rune.invalidAction() }
+  console.log("Deploy Check 4")
   // does the player control the tile?
-  if (game.tiles[where].owner != player.index) { return false }
-  console.log("Check 4")
-  // try to spawn the minion
-  return trySpawnMinion(game, player, minion, where);
+  const tile: Tile = game.tiles[where];
+  if (tile.owner != PlayerIndex.NONE && tile.owner != player.index) { throw Rune.invalidAction() }
+  console.log("Deploy Check 5")
+  // return the active player
+  return player;
 }
 
 
-function trySpawnMinion(
-  game: GameState,
-  player: PlayerState,
-  minion: MinionType,
-  where: number
-): boolean {
-  console.log("Player Resources:", player.resources)
-  // does the player have enough resources?
-  if (player.resources <= 0) { return false }
-  // can this player spawn minions on this tile?
-  const tile: Tile = game.tiles[where];
-  if (tile.owner != PlayerIndex.NONE && tile.owner != player.index) { return false }
+function deployMinion(game: GameState, player: PlayerState, minion: MinionType, where: number): void {
   // place the minion on the battlefield
+  spawnMinion(game, minion, where);
+  // spend the player's resources
+  player.resources--;
+}
+
+
+function spawnMinion(game: GameState, minion: MinionType, where: number): void {
+  // place the minion on the battlefield
+  const tile: Tile = game.tiles[where];
   switch (minion) {
     case MinionType.POWER:
       tile.power++;
@@ -439,9 +442,51 @@ function trySpawnMinion(
       break;
   }
   // register the minion and the event
-  player.resources--;
   console.log("Minion Spawned:", minion)
   emitMinionSpawned(game.events, minion, where);
+}
+
+
+// -----------------------------------------------------------------------------
+// Game Logic - Attacking
+// -----------------------------------------------------------------------------
+
+
+function prevalidateAttackCommand(
+  game: GameState,
+  playerId: string,
+  from: number,
+  to: number
+): PlayerState {
+  const player: PlayerState = game.players[game.currentPlayer];
+  console.log("Current player:", player.id)
+  console.log("Action player:", playerId)
+  console.log("Game Phase:", game.phase)
+  console.log("Attacker Tile:", from)
+  console.log("Defender Tile:", to)
+  // is it the player's turn?
+  if (player.id != playerId) { throw Rune.invalidAction() }
+  console.log("Attack Check 1")
+  // can the player issue attack commands?
+  if (game.phase != GameplayPhase.INPUT_ANY) { throw Rune.invalidAction() }
+  console.log("Attack Check 2")
+  // are the tile indices valid?
+  const n = game.tiles.length;
+  if (from < 0 || from >= n || from === UNUSABLE_TILE) { throw Rune.invalidAction() }
+  if (to < 0 || to >= n || to === UNUSABLE_TILE) { throw Rune.invalidAction() }
+  console.log("Attack Check 3")
+  // does the player control the attacker's tile?
+  if (game.tiles[from].owner != player.index) { throw Rune.invalidAction() }
+  console.log("Attack Check 4")
+  // does the player not control the defender's tile?
+  if (game.tiles[to].owner === player.index) { throw Rune.invalidAction() }
+  console.log("Attack Check 5")
+  // return the active player
+  return player;
+}
+
+
+function attackTile(game: GameState, player: PlayerState, from: number, to: number): boolean {
   return true;
 }
 
@@ -451,41 +496,44 @@ function trySpawnMinion(
 // -----------------------------------------------------------------------------
 
 
-function tryMoveCommand(game: GameState, playerId: string, from: number, to: number): boolean {
+function prevalidateMoveCommand(game: GameState, playerId: string, from: number, to: number): PlayerState {
   const player: PlayerState = game.players[game.currentPlayer];
   // is it the player's turn?
-  if (player.id != playerId) { return false }
+  if (player.id != playerId) { throw Rune.invalidAction() }
   console.log("Move Check 1")
-  // can the player issue spawn commands?
-  if (game.phase != GameplayPhase.INPUT_ANY) { return false }
+  // can the player issue move commands?
+  if (game.phase != GameplayPhase.INPUT_ANY) { throw Rune.invalidAction() }
   console.log("Move Check 2")
   // is the tile index valid?
-  const n = game.battlefield.tiles.length;
-  if (from < 0 || from >= n) { return false }
+  const n = game.tiles.length;
+  if (from < 0 || from >= n || from === UNUSABLE_TILE) { throw Rune.invalidAction() }
   console.log("Move Check 3")
   // is the tile index valid?
-  if (to < 0 || to >= n) { return false }
+  if (to < 0 || to >= n || to === UNUSABLE_TILE) { throw Rune.invalidAction() }
   console.log("Move Check 4")
-  // does the origin tile have a minion?
-  const tile: Tile = game.battlefield.tiles[from];
-  if (!tile.minion) { return false }
+  // does the player control the source tile?
+  const source: Tile = game.tiles[from];
+  if (source.owner != player.index) { throw Rune.invalidAction() }
   console.log("Move Check 5")
-  // does the player control this minion?
-  const minion: Minion = game.battlefield.minions[tile.minion];
-  if (minion.owner != player.index) { return false }
+  // does the player control the target tile?
+  const target: Tile = game.tiles[from];
+  if (target.owner != target.index) { throw Rune.invalidAction() }
   console.log("Move Check 6")
-  // try to attack-move to the destination tile
-  return tryAttackMove(game, minion, to);
+  // does the source tile have minions?
+  if (!source.power && !source.speed && !source.technical) { throw Rune.invalidAction() }
+  console.log("Move Check 7")
+  // are the minions already there?
+  if (from === to) { throw Rune.invalidAction() }
+  console.log("Move Check 8")
+  // is there a path between the given tiles?
+  const path: number[] = getPath(game.battlefield, from, to, minion.movement);
+  if (path.length === 0) { throw Rune.invalidAction() }
+  // return the active player
+  return player;
 }
 
 
-function tryAttackMove(game: GameState, minion: Minion, to: number): boolean {
-  const from: number = minion.position;
-  // is it already there?
-  if (from === to) { return true }
-  // is there a path between the given tiles?
-  const path: number[] = getPath(game.battlefield, from, to, minion.movement);
-  if (path.length === 0) { return false }
+function moveToTile(game: GameState, from: number, to: number): boolean {
   // are there minions along the way (excluding the last tile)?
   for (let i = path.length - 2; i >= 0; i--) {
     const k = path[i];
@@ -589,151 +637,20 @@ function swapTurns(game: GameState): void {
 }
 
 
-function addToBench(player: PlayerState, species: MinionData): boolean {
-  const bench = player.bench;
-  // is there free space?
-  if (bench.length >= MAX_BENCH_SIZE) { return false }
-  bench.push(species);
-  // emitMinionEnteredBench(game, uid);
-  return true;
-}
-
-
-function addToGraveyard(player: PlayerState, species: MinionData): boolean {
-  const graveyard = player.graveyard;
-  // is there free space?
-  if (graveyard.length >= GRAVEYARD_SIZE) { return false }
-  graveyard.push(species);
-  // emitMinionEnteredBench(game, uid);
-  return true;
-}
-
-
-function placeMinionOnBench(game: GameState, minion: Minion): boolean {
-  if (minion == null) { return false }
-  if (minion.owner == PlayerIndex.NONE) { return false }
-  const player: PlayerState = game.players[minion.owner];
-  const bench = player.bench;
-  // is there free space?
-  if (bench.length >= MAX_BENCH_SIZE) { return false }
-  /*
-  // is this minion already on the bench?
-  const uid = minion.uid;
-  for (const other of bench) {
-    if (other.uid === uid) { return true }
-  }
-  minion.location = BoardLocation.BENCH;
-  minion.position = bench.length;
-  bench.push(minion);
-  */
-  bench.push(minion.baseData);
-  // removeFromBattle(game, minion);
-  // emitMinionEnteredBench(game, uid);
-  return true;
-}
-
-
-function placeMinionOnGraveyard(game: GameState, minion: Minion): boolean {
-  if (minion == null) { return false }
-  if (minion.owner == PlayerIndex.NONE) { return false }
-  const player: PlayerState = game.players[minion.owner];
-  const graveyard = player.graveyard;
-  // is there free space?
-  if (graveyard.length >= GRAVEYARD_SIZE) { return false }
-  /*
-  const uid = minion.uid;
-  // is this minion already on the graveyard?
-  for (const other of graveyard) {
-    if (other.uid === uid) { return true }
-  }
-  minion.location = BoardLocation.GRAVEYARD;
-  minion.position = graveyard.length;
-  graveyard.push(minion);
-  */
-  graveyard.push(minion.baseData);
-  // removeFromBattle(game, minion);
-  // emitMinionEnteredGraveyard(game, uid);
-  return true;
-}
-
-
-function removeFromBattle(game: GameState, minion: Minion, emit: boolean = true): boolean {
-  const i = minion.position;
-  const uid = minion.uid;
-  const tiles = game.battlefield.tiles;
-  if (i < 0 || i >= tiles.length) { return false }
-  const tile: Tile = tiles[i];
-  if (tile.minion != uid) { return false }
-  tile.minion = 0;
-  delete game.battlefield.minions[uid];
-  // emit_signal("minion_exited_battlefield", minion)
-  return true;
-}
-
-
-function removeFromBattleByTile(game: GameState, i: number): Minion | null {
-  const tiles = game.battlefield.tiles;
-  if (i < 0 || i >= tiles.length) { return null }
-  const tile: Tile = tiles[i];
-  const uid = tile.minion;
-  if (!uid) { return null }
-  const minion = game.battlefield.minions[uid];
-  if (minion == null) { return null }
-  tile.minion = 0;
-  delete game.battlefield.minions[uid];
-  // emit_signal("minion_exited_battlefield", minion)
-  return minion;
-}
-
-
-function removeFromBench(player: PlayerState, i: number): MinionData | null {
-  const bench = player.bench;
-  console.log("Player Bench:", player.bench);
-  if (i < 0 || i >= bench.length) { return null }
-  const species: MinionData[] = bench.splice(i, 1);
-  // emit_signal("minion_exited_bench", minion)
-  return species[0];
-}
-
-
-function removeFromGraveyard(player: PlayerState, i: number): MinionData | null {
-  const graveyard = player.graveyard;
-  if (i < 0 || i >= graveyard.length) { return null }
-  const species: MinionData[] = graveyard.splice(i, 1);
-  // emit_signal("minion_exited_graveyard", minion)
-  return species[0];
-}
-
-
-function dequeueFromGraveyard(player: PlayerState): MinionData | null {
-  return removeFromGraveyard(player, 0);
-}
-
-
-function isGraveyardFull(player: PlayerState): boolean {
-  return player.graveyard.length >= GRAVEYARD_SIZE;
-}
-
-
-function killMinion(game: GameState, minion: Minion): void {
-  // emit_signal("minion_died", pi, minion.index, minion.position)
-  removeFromBattle(game, minion);
-  if (minion.owner === PlayerIndex.NONE) { return }
-  const player: PlayerState = game.players[minion.owner]
-  if (isGraveyardFull(player)) {
-    // emit_signal("minion_reviving", pi, 0, len(board.players[pi].bench))
-    const other = dequeueFromGraveyard(player);
-    if (other != null) {
-      addToBench(player, other);
-    }
-  }
-  addToGraveyard(player, minion.baseData);
-}
-
-
 // -----------------------------------------------------------------------------
 // Game Actions
 // -----------------------------------------------------------------------------
+
+type DeployActionPayload = {
+  minion: MinionType;
+  where: number;
+};
+
+
+type AttackActionPayload = {
+  from: number;
+  to: number;
+};
 
 
 type MoveActionPayload = {
@@ -744,15 +661,11 @@ type MoveActionPayload = {
   technical: number;
 };
 
-type SpawnActionPayload = {
-  what: MinionType;
-  where: number;
-};
-
 
 type GameActions = {
+  deploy: (params: DeployActionPayload) => void;
+  attack: (params: AttackActionPayload) => void;
   move: (params: MoveActionPayload) => void;
-  spawn: (params: SpawnActionPayload) => void;
 };
 
 
@@ -801,7 +714,33 @@ Rune.initLogic({
   },
 
   actions: {
+    deploy({ minion, where }, { game, playerId }) {
+      // validate inputs
+      const player: PlayerState = prevalidateDeployCommand(game, playerId, minion, where);
+      // empty the event queue
+      game.events = [];
+      // execute the command
+      deployMinion(game, player, minion, where);
+      // transition to the next player, ask for new input
+      // swapTurns(game);
+      console.log("FIXME - swapTurn() here")
+      emitInputRequired(game.events, game.currentPlayer);
+    },
+
+    attack({ from, to }, { game, playerId }) {
+      const player: PlayerState = prevalidateAttackCommand(game, playerId, from, to);
+      // empty the event queue
+      game.events = [];
+      // execute the command
+      attackTile(game, player, from, to);
+      // transition to the next player, ask for new input
+      // swapTurns(game);
+      console.log("FIXME - swapTurn() here")
+      emitInputRequired(game.events, game.currentPlayer);
+    },
+
     move({ from, to }, { game, playerId }) {
+      const player: PlayerState = prevalidateMoveCommand(game, playerId, from, to);
       // empty the event queue
       game.events = [];
       // try to execute the command
@@ -815,22 +754,6 @@ Rune.initLogic({
         // invalidate command, ask for new input
         game.events = [];
         console.log("Failed to execute move command", from, to)
-      }
-      emitInputRequired(game.events, game.currentPlayer);
-    },
-
-    spawn({ what, where }, { game, playerId }) {
-      // empty the event queue
-      game.events = [];
-      // try to execute the command
-      const success = trySpawnCommand(game, playerId, what, where);
-      if (success) {
-        // transition to the next player, ask for new input
-        // swapTurns(game);
-        console.log("FIXME - swapTurn() here")
-      } else {
-        // invalidate command, ask for new input
-        game.events = [];
       }
       emitInputRequired(game.events, game.currentPlayer);
     },
