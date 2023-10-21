@@ -467,18 +467,27 @@ function validateAttackCommand(
   if (to < 0 || to >= n || to === UNUSABLE_TILE) { throw Rune.invalidAction() }
   console.log("Attack Check 3")
   // does the player control the attacker's tile?
-  if (game.tiles[from].owner != player.index) { throw Rune.invalidAction() }
+  const attacker: Tile = game.tiles[from];
+  if (attacker.owner != player.index) { throw Rune.invalidAction() }
   console.log("Attack Check 4")
   // does the player not control the defender's tile?
-  if (game.tiles[to].owner === player.index) { throw Rune.invalidAction() }
+  const defender: Tile = game.tiles[to];
+  if (defender.owner === player.index) { throw Rune.invalidAction() }
   console.log("Attack Check 5")
+  // does the attacking tile contain any minions?
+  if (attacker.power + attacker.speed + attacker.technical <= 0) { throw Rune.invalidAction() }
+  console.log("Attack Check 6")
   // return the active player
   return player;
 }
 
 
-function attackTile(game: GameState, player: PlayerState, from: number, to: number): boolean {
-  return true;
+function attackFromTileToTile(game: GameState, from: number, to: number): CombatResult {
+  const attacker: Tile = game.tiles[from];
+  const attackFormation: Formation = game.players[attacker.owner].formation;
+  const defender: Tile = game.tiles[to];
+  const defenseFormation: Formation = game.players[defender.owner].formation;
+  return resolveCombat(game, attacker, attackFormation, defender, defenseFormation);
 }
 
 
@@ -531,14 +540,37 @@ function validateMoveCommand(
   if (total <= 0) { throw Rune.invalidAction() }
   console.log("Move Check 9")
   // are there enough minions on the tile?
+  if (power > source.power) { throw Rune.invalidAction() }
+  if (speed > source.speed) { throw Rune.invalidAction() }
+  if (technical > source.technical) { throw Rune.invalidAction() }
+  console.log("Move Check 10")
   // is at least one left behind to defend?
   if (available <= total) { throw Rune.invalidAction() }
-  console.log("Move Check 10")
+  console.log("Move Check 11")
   // is there a path between the given tiles?
   if (!canPlayerGoFromAToB(game.tiles, from, to)) { throw Rune.invalidAction() }
-  console.log("Move Check 11")
+  console.log("Move Check 12")
   // return the active player
   return player;
+}
+
+
+function moveMinions(
+  game: GameState,
+  from: number,
+  to: number,
+  power: number,
+  speed: number,
+  technical: number
+): void {
+  const source: Tile = game.tiles[from];
+  const target: Tile = game.tiles[to];
+  source.power -= power;
+  target.power += power;
+  source.speed -= speed;
+  target.speed += speed;
+  source.technical -= technical;
+  target.technical += technical;
 }
 
 
@@ -547,42 +579,127 @@ function validateMoveCommand(
 // -----------------------------------------------------------------------------
 
 
-function resolveCombat(game: GameState, attacker: Minion, defender: Minion): CombatResult {
-  // emit_signal("combat_started", _arg_minion.position, _arg_target.position)
-  // emit_signal("minion_attacking", _arg_minion.position, _arg_target.position)
-  // emit_signal("minion_defending", _arg_target.position, _arg_minion.position)
-  const ap = attacker.power;
-  const dp = defender.power;
-  const ah = attacker.health;
-  const dh = defender.health;
-  let attackerDied = false;
-  let defenderDied = false;
-  // emit_signal("minion_attacked", _arg_minion.position, _arg_target.position)
-  defender.health -= ap;
-  // emit_signal("minion_damaged", _arg_target.position, ap)
-  // emit_signal("minion_defended", _arg_target.position, _arg_minion.position)
-  attacker.health -= dp;
-  // emit_signal("minion_damaged", _arg_minion.position, dp)
-  if (defender.health <= 0) {
-    defenderDied = true;
-    killMinion(game, defender);
-  } else {
-    // emit_signal("minion_survived", _arg_target.position)
-    defender.health = dh;
+function resolveCombat(
+  game: GameState,
+  attacker: Tile,
+  attackFormation: Formation,
+  defender: Tile,
+  defenseFormation: Formation
+): CombatResult {
+  const attackTypes: MinionType[] = formationToMinionTypeStack(attackFormation);
+  const defenseTypes: MinionType[] = formationToMinionTypeStack(defenseFormation);
+
+  const attackingMinions: number[] = [];
+  for (const minion of attackTypes) {
+    attackingMinions.push(minionsByType(attacker, minion));
   }
-  if (attacker.health <= 0) {
-    attackerDied = true;
-    killMinion(game, attacker);
-  } else {
-    // emit_signal("minion_survived", _arg_minion.position)
-    attacker.health = ah;
+
+  const defendingMinions: number[] = [];
+  for (const minion of defenseTypes) {
+    defendingMinions.push(minionsByType(defender, minion));
   }
-  // emit_signal("combat_ended", _arg_minion.position, _arg_target.position)
-  if (attackerDied) {
-    return defenderDied ? CombatResult.DRAW : CombatResult.LOSS;
-  } else {
-    return defenderDied ? CombatResult.WIN : CombatResult.DRAW;
+
+  let attackType: MinionType = attackTypes.pop() as MinionType;
+  let defenseType: MinionType = defenseTypes.pop() as MinionType;
+  let numAttackers: number = minionsByType(attacker, attackType);
+  let numDefenders: number = minionsByType(defender, defenseType);
+
+  while (attackTypes.length > 0 && defenseTypes.length > 0) {
+    // are there any attackers of this type?
+    if (numAttackers <= 0) {
+      attackType = attackTypes.pop() as MinionType;
+      numAttackers = minionsByType(attacker, attackType);
+      continue;
+    }
+    // are there any defenders of this type?
+    if (numDefenders <= 0) {
+      defenseType = defenseTypes.pop() as MinionType;
+      numDefenders = minionsByType(defender, defenseType);
+      continue;
+    }
+    // calculate the type matchup bonuses
+    const bonusAttackType = typeMatchupMultiplier(attackType, defenseType);
+    const bonusDefenseType = typeMatchupMultiplier(defenseType, attackType);
+    // calculate total damage output
+    const totalAttack = numAttackers * bonusAttackType;
+    const totalDefense = numDefenders * bonusDefenseType;
+    // update the remaining survivors
+    numAttackers -= totalDefense;
+    numDefenders -= totalAttack;
+    // outcome of this round
+    let result = CombatResult.DRAW;
+    if (numAttackers <= 0 && numDefenders > 0) {
+      result = CombatResult.LOSS;
+    } else if (numAttackers > 0 && numDefenders <= 0) {
+      result = CombatResult.WIN;
+    }
+    // TODO emit combat step
   }
+
+  // general outcome
+  let result = CombatResult.DRAW;
+  if (numAttackers <= 0 && numDefenders > 0) {
+    result = CombatResult.LOSS;
+  } else if (numAttackers > 0 && numDefenders <= 0) {
+    result = CombatResult.WIN;
+  }
+  return result;
+}
+
+
+function formationToMinionTypes(formation: Formation): MinionType[] {
+  switch (formation) {
+    case Formation.POWER_TECHNICAL_SPEED:
+      return [MinionType.POWER, MinionType.TECHNICAL, MinionType.SPEED];
+    case Formation.SPEED_POWER_TECHNICAL:
+      return [MinionType.SPEED, MinionType.POWER, MinionType.TECHNICAL];
+    case Formation.SPEED_TECHNICAL_POWER:
+      return [MinionType.SPEED, MinionType.TECHNICAL, MinionType.POWER];
+    case Formation.TECHNICAL_POWER_SPEED:
+      return [MinionType.TECHNICAL, MinionType.POWER, MinionType.SPEED];
+    case Formation.TECHNICAL_SPEED_POWER:
+      return [MinionType.TECHNICAL, MinionType.SPEED, MinionType.POWER];
+  }
+  return [MinionType.POWER, MinionType.SPEED, MinionType.TECHNICAL];
+}
+
+
+// same as above, but in reverse order
+function formationToMinionTypeStack(formation: Formation): MinionType[] {
+  switch (formation) {
+    case Formation.POWER_TECHNICAL_SPEED:
+      return [MinionType.SPEED, MinionType.TECHNICAL, MinionType.POWER];
+    case Formation.SPEED_POWER_TECHNICAL:
+      return [MinionType.TECHNICAL, MinionType.POWER, MinionType.SPEED];
+    case Formation.SPEED_TECHNICAL_POWER:
+      return [MinionType.POWER, MinionType.TECHNICAL, MinionType.SPEED];
+    case Formation.TECHNICAL_POWER_SPEED:
+      return [MinionType.SPEED, MinionType.POWER, MinionType.TECHNICAL];
+    case Formation.TECHNICAL_SPEED_POWER:
+      return [MinionType.POWER, MinionType.SPEED, MinionType.TECHNICAL];
+  }
+  return [MinionType.TECHNICAL, MinionType.SPEED, MinionType.POWER];
+}
+
+
+function minionsByType(tile: Tile, minion: MinionType): number {
+  switch (minion) {
+    case MinionType.POWER:
+      return tile.power;
+    case MinionType.SPEED:
+      return tile.speed;
+    case MinionType.TECHNICAL:
+      return tile.technical;
+  }
+  return 0;
+}
+
+
+function typeMatchupMultiplier(attacker: MinionType, defender: MinionType): number {
+  if (attacker === MinionType.POWER && defender === MinionType.TECHNICAL) { return 2 }
+  if (attacker === MinionType.SPEED && defender === MinionType.POWER) { return 2 }
+  if (attacker === MinionType.TECHNICAL && defender === MinionType.SPEED) { return 2 }
+  return 1;
 }
 
 
@@ -695,7 +812,7 @@ Rune.initLogic({
       // empty the event queue
       game.events = [];
       // execute the command
-      attackTile(game, player, from, to);
+      attackFromTileToTile(game, from, to);
       // transition to the next player, ask for new input
       // swapTurns(game);
       console.log("FIXME - swapTurn() here")
@@ -706,18 +823,11 @@ Rune.initLogic({
       const player: PlayerState = validateMoveCommand(game, playerId, from, to, power, speed, technical);
       // empty the event queue
       game.events = [];
-      // try to execute the command
-      const success = tryMoveCommand(game, playerId, from, to);
-      if (success) {
-        // TODO check if there is combat available
-        // transition to the next player, ask for new input
-        // swapTurns(game);
-        console.log("FIXME - swapTurn() here")
-      } else {
-        // invalidate command, ask for new input
-        game.events = [];
-        console.log("Failed to execute move command", from, to)
-      }
+      // execute the command
+      moveMinions(game, from, to, power, speed, technical);
+      // transition to the next player, ask for new input
+      // swapTurns(game);
+      console.log("FIXME - swapTurn() here")
       emitInputRequired(game.events, game.currentPlayer);
     },
   },
