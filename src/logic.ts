@@ -12,6 +12,8 @@ import type { Players, RuneClient } from "rune-games-sdk/multiplayer"
 export const TIME_PER_TURN: number = 45;  // seconds
 export const MAX_MOVEMENT: number = 3;
 
+const BOARD_SIZE: number = 25;
+const BOARD_NUM_ROWS: number = 5;
 const BOARD_NUM_COLUMNS: number = 5;
 const INITIAL_RESOURCES: number = 1;
 const INITIAL_ARMY: number = 6;
@@ -153,119 +155,108 @@ function newBattlefield(): Tile[] {
 }
 
 
-// Builds a path from tiles `i` to `j` in a given `battlefield`, with length <= `n`.
-// Assumes there is at most one possible path.
-// Assumes valid tile indices.
-// Returns an empty array if there is no possible path.
-export function getPath(i: number, j: number, n: number): number[] {
-  // const paths: Record<number, number[]> = getPaths(battlefield, i, n);
-  // return paths[j] || [];
-
+// Returns whether a path from tiles `a` to `b` exists in which the player owning
+// the source tile also controls all the tiles in between.
+export function hasControlledPathBetween(tiles: Tile[], a: number, b: number): boolean {
   // already there?
-  if (i === j) { return [] }
-  const rowA = (i / BOARD_NUM_COLUMNS) | 0;
-  const colA = i % BOARD_NUM_COLUMNS;
-  const rowB = (j / BOARD_NUM_COLUMNS) | 0;
-  const colB = j % BOARD_NUM_COLUMNS;
-  // too far away?
-  if (Math.abs(rowB - rowA) + Math.abs(colB - colA) > n) { return [] }
+  if (a === b) { return false }
 
-  let k = i;
-  let row = rowA;
-  let col = colA;
-  const path: number[] = [];
-  for (; n > 0; n--) {
-    // figure out in which direction to move
-    if (rowB < row) {
-      k -= BOARD_NUM_COLUMNS;
-    } else if (rowB > row) {
-      k += BOARD_NUM_COLUMNS;
-    } else if (colB < col) {
-      k--;
-    } else if (colB > col) {
-      k++;
+  // out of bounds?
+  if (a <= 0 || a >= tiles.length || a === UNUSABLE_TILE) { return false }
+  if (b <= 0 || b >= tiles.length || b === UNUSABLE_TILE) { return false }
+
+  // check for a path
+  return canPlayerGoFromAToB(tiles, a, b);
+}
+
+
+function canPlayerGoFromAToB(tiles: Tile[], a: number, b: number): boolean {
+  const owner: PlayerIndex = tiles[a].owner;
+  const stack: number[] = [a];
+  const visited: number[] = [];
+  while (stack.length > 0) {
+    const i: number = stack.pop() as number;
+    if (i === b) { return true }
+    if (visited.includes(i)) { continue }
+    visited.push(i);
+    const tile: Tile = tiles[i];
+    if (tile.owner != owner) { continue }
+    for (const k of getAdjacentTiles(i)) {
+      stack.push(k);
     }
-    // is the new tile traversable?
-    if (k === UNUSABLE_TILE) { return [] }
-    // if (!!tile.minion) { return [] }
-    path.push(k);
-    // have we reached the target?
-    if (k === j) { return path }
-    row = (k / BOARD_NUM_COLUMNS) | 0;
-    col = k % BOARD_NUM_COLUMNS;
   }
-  // end of loop, did not reach target
-  return [];
+  return false;
 }
 
 
-// Builds a path from tiles `i` to `j` in a given `battlefield`, with length <= `n`.
-// Assumes there is at most one possible path.
-// Assumes valid tile indices.
-// Returns an empty array if there is no possible path.
-// Also returns an empty array if there are minions along the path.
-export function getFreePath(tiles: Tile[], i: number, j: number, n: number): number[] {
-  const path: number[] = getPath(i, j, n);
-  for (const k of path) {
-    const tile: Tile = tiles[k];
-    if (!!tile.power || !!tile.speed || !!tile.technical) { return [] }
+// Given a battlefield and a player index,
+// calculate which tiles are controlled by other players
+// but adjacent to tiles controlled by the given player.
+export function getAttackableTiles(tiles: Tile[], p: PlayerIndex): number[] {
+  const targets: number[] = [];
+  for (const tile of tiles) {
+    if (tile.owner != p || tile.index === UNUSABLE_TILE) { continue }
+    for (const i of getAdjacentTiles(tile.index)) {
+      if (targets.includes(i)) { continue }
+      if (tiles[i].owner != p) {
+        targets.push(i);
+      }
+    }
   }
-  return path;
+  return targets;
 }
 
 
-// Given a `battlefield`, a tile number `i` and a movement capacity `n`,
-// calculate which tiles are reachable from `i`.
-export function getReach(tiles: Tile[], i: number, n: number): number[] {
-  if (n <= 0) { return [] }
-  let reachable: number[] = [i];
-  buildReach(tiles, reachable, i, n);
-  removeItem(reachable, i);
-  return reachable;
-}
-
-
-function buildReach(tiles: Tile[], reach: number[], i: number, n: number): void {
-  if (n <= 0) { return }
-  const adjacent: number[] = getAdjacentTiles(tiles, i);
-  for (const k of adjacent) {
-    // already visited?
-    if (reach.includes(k)) { continue }
-    const tile: Tile = tiles[k];
-    // is this tile pathable?
-    if (k == UNUSABLE_TILE) { continue }
-    // is it already occupied?
-    if (!!tile.power || !!tile.speed || !!tile.technical) { continue }
-    // reachable, keep going
-    reach.push(k);
-    buildReach(tiles, reach, k, n-1);
+// Given a battlefield and a player index,
+// calculate which tiles controlled by the given player
+// have adjacent tiles controlled by another player.
+export function getFrontier(tiles: Tile[], p: PlayerIndex): number[] {
+  const frontier: number[] = [];
+  for (const tile of tiles) {
+    if (tile.owner != p || tile.index === UNUSABLE_TILE) { continue }
+    for (const i of getAdjacentTiles(tile.index)) {
+      if (tiles[i].owner != p) {
+        frontier.push(tile.index);
+        break;
+      }
+    }
   }
+  return frontier;
 }
 
 
-// Returns all possible adjacent tile numbers,
-// given a `battlefield` and a tile number `i`.
+// Returns all possible adjacent tile numbers, given a tile number `i`.
 // Does not perform occupancy checks, just board boundary checks.
-function getAdjacentTiles(tiles: Tile[], i: number): number[] {
-  const n = tiles.length;
-  const rows = (n / BOARD_NUM_COLUMNS) | 0;
-  const maxRow = rows - 1;
+function getAdjacentTiles(i: number): number[] {
+  const maxRow = BOARD_NUM_ROWS - 1;
   const maxColumn = BOARD_NUM_COLUMNS - 1;
-  if (i <= 0 || i >= n) { return []; }
+  if (i <= 0 || i >= BOARD_SIZE || i === UNUSABLE_TILE) { return []; }
   const adjacent: number[] = [];
   const row = (i / BOARD_NUM_COLUMNS) | 0;
   const column = i % BOARD_NUM_COLUMNS;
   if (row > 0) {
-    adjacent.push(i - BOARD_NUM_COLUMNS);
+    const k = i - BOARD_NUM_COLUMNS;
+    if (k != UNUSABLE_TILE) {
+      adjacent.push(k);
+    }
   }
   if (row < maxRow) {
-    adjacent.push(i + BOARD_NUM_COLUMNS);
+    const k = i + BOARD_NUM_COLUMNS;
+    if (k != UNUSABLE_TILE) {
+      adjacent.push(k);
+    }
   }
   if (column > 0) {
-    adjacent.push(i - 1);
+    const k = i - 1;
+    if (k != UNUSABLE_TILE) {
+      adjacent.push(k);
+    }
   }
   if (column < maxColumn) {
-    adjacent.push(i + 1);
+    const k = i + 1;
+    if (k != UNUSABLE_TILE) {
+      adjacent.push(k);
+    }
   }
   return adjacent;
 }
@@ -384,7 +375,7 @@ function emitMinionSpawned(events: EventQueue, minion: number, tile: number): vo
 // -----------------------------------------------------------------------------
 
 
-function prevalidateDeployCommand(
+function validateDeployCommand(
   game: GameState,
   playerId: string,
   minion: MinionType,
@@ -452,7 +443,7 @@ function spawnMinion(game: GameState, minion: MinionType, where: number): void {
 // -----------------------------------------------------------------------------
 
 
-function prevalidateAttackCommand(
+function validateAttackCommand(
   game: GameState,
   playerId: string,
   from: number,
@@ -496,7 +487,15 @@ function attackTile(game: GameState, player: PlayerState, from: number, to: numb
 // -----------------------------------------------------------------------------
 
 
-function prevalidateMoveCommand(game: GameState, playerId: string, from: number, to: number): PlayerState {
+function validateMoveCommand(
+  game: GameState,
+  playerId: string,
+  from: number,
+  to: number,
+  power: number,
+  speed: number,
+  technical: number
+): PlayerState {
   const player: PlayerState = game.players[game.currentPlayer];
   // is it the player's turn?
   if (player.id != playerId) { throw Rune.invalidAction() }
@@ -520,62 +519,26 @@ function prevalidateMoveCommand(game: GameState, playerId: string, from: number,
   if (target.owner != target.index) { throw Rune.invalidAction() }
   console.log("Move Check 6")
   // does the source tile have minions?
-  if (!source.power && !source.speed && !source.technical) { throw Rune.invalidAction() }
+  const available = source.power + source.speed + source.technical;
+  if (available <= 0) { throw Rune.invalidAction() }
   console.log("Move Check 7")
   // are the minions already there?
   if (from === to) { throw Rune.invalidAction() }
   console.log("Move Check 8")
+  // is the player moving any minions?
+  if (power < 0 || speed < 0 || technical < 0) { throw Rune.invalidAction() }
+  const total = power + speed + technical;
+  if (total <= 0) { throw Rune.invalidAction() }
+  console.log("Move Check 9")
+  // are there enough minions on the tile?
+  // is at least one left behind to defend?
+  if (available <= total) { throw Rune.invalidAction() }
+  console.log("Move Check 10")
   // is there a path between the given tiles?
-  const path: number[] = getPath(game.battlefield, from, to, minion.movement);
-  if (path.length === 0) { throw Rune.invalidAction() }
+  if (!canPlayerGoFromAToB(game.tiles, from, to)) { throw Rune.invalidAction() }
+  console.log("Move Check 11")
   // return the active player
   return player;
-}
-
-
-function moveToTile(game: GameState, from: number, to: number): boolean {
-  // are there minions along the way (excluding the last tile)?
-  for (let i = path.length - 2; i >= 0; i--) {
-    const k = path[i];
-    const tile: Tile = game.battlefield.tiles[k];
-    // TODO flying minions must use a different logic
-    if (!!tile.minion) { return false }
-  }
-  // is the destination tile occupied?
-  const tile: Tile = game.battlefield.tiles[to];
-  if (!!tile.minion) {
-    // is it friend or foe?
-    const other: Minion = game.battlefield.minions[tile.minion];
-    // cannot overlap with friendly minions
-    if (minion.owner === other.owner) { return false }
-    // move to the tile just before the enemy
-    // `getPath()` ensures that there is a traversable path
-    path.pop();
-    moveAlongPath(game, from, path);
-    // resolve combat
-    // TODO
-  } else {
-    // move the minion to the desired spot
-    // `getPath()` ensures that there is a traversable path
-    moveAlongPath(game, from, path);
-  }
-  return true;
-}
-
-
-function moveAlongPath(game: GameState, i: number, path: number[]): void {
-  let j = i;
-  const tiles = game.battlefield.tiles;
-  const uid = tiles[i].minion;
-  const minion = game.battlefield.minions[uid];
-  for (const k of path) {
-    // emitMinionMoving(game, uid, j, k);
-    tiles[j].minion = 0;
-    tiles[k].minion = uid;
-    minion.position = k;
-    emitMinionMoved(game.events, uid, j, k);
-    j = k;
-  }
 }
 
 
@@ -716,7 +679,7 @@ Rune.initLogic({
   actions: {
     deploy({ minion, where }, { game, playerId }) {
       // validate inputs
-      const player: PlayerState = prevalidateDeployCommand(game, playerId, minion, where);
+      const player: PlayerState = validateDeployCommand(game, playerId, minion, where);
       // empty the event queue
       game.events = [];
       // execute the command
@@ -728,7 +691,7 @@ Rune.initLogic({
     },
 
     attack({ from, to }, { game, playerId }) {
-      const player: PlayerState = prevalidateAttackCommand(game, playerId, from, to);
+      const player: PlayerState = validateAttackCommand(game, playerId, from, to);
       // empty the event queue
       game.events = [];
       // execute the command
@@ -739,8 +702,8 @@ Rune.initLogic({
       emitInputRequired(game.events, game.currentPlayer);
     },
 
-    move({ from, to }, { game, playerId }) {
-      const player: PlayerState = prevalidateMoveCommand(game, playerId, from, to);
+    move({ from, to, power, speed, technical }, { game, playerId }) {
+      const player: PlayerState = validateMoveCommand(game, playerId, from, to, power, speed, technical);
       // empty the event queue
       game.events = [];
       // try to execute the command
