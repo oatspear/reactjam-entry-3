@@ -83,6 +83,7 @@ export interface Tile {
   power: number;
   speed: number;
   technical: number;
+  usable: boolean;
 }
 
 
@@ -93,6 +94,19 @@ function newTile(index: number): Tile {
     power: 0,
     speed: 0,
     technical: 0,
+    usable: true,
+  };
+}
+
+
+function newUnusableTile(index: number): Tile {
+  return {
+    index,
+    owner: PlayerIndex.NONE,
+    power: 0,
+    speed: 0,
+    technical: 0,
+    usable: false,
   };
 }
 
@@ -104,6 +118,7 @@ function newSpawnTile(index: number, owner: PlayerIndex): Tile {
     power: 1,
     speed: 1,
     technical: 1,
+    usable: true,
   };
 }
 
@@ -136,7 +151,7 @@ function newBattlefield(): Tile[] {
     // row 3
     newTile(10),
     newTile(11),
-    newTile(12),  // unusable
+    newUnusableTile(12),
     newTile(13),
     newTile(14),
     // row 4

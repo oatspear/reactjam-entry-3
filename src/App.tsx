@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react"
 
 import "./App.css"
-import { EventType, GameState, PlayerIndex, PlayerState, getPlayerIndex } from "./logic.ts"
+import { GameState, PlayerIndex, PlayerState, getPlayerIndex } from "./logic.ts"
 
 import BattlefieldView, { BattlefieldCallbacks } from './components/BattlefieldView.tsx';
-import PlayerStatusBar from "./components/PlayerStatusBar.tsx";
 import PlayerActionBar from "./components/PlayerActionBar.tsx";
 
 import iconAvatarPlaceholder from "./assets/avatar-placeholder.png";
@@ -81,7 +80,7 @@ function App() {
     const benchIndex: number = 0;
     const spawnPoint: number = 0;
     const moveTo: number = 0;
-    Rune.actions.spawn({ benchIndex, spawnPoint, moveTo });
+    // Rune.actions.spawn({ benchIndex, spawnPoint, moveTo });
   };
 
   useEffect(() => {
@@ -117,21 +116,11 @@ function App() {
     onTileSelected(i: number) {
       if (uiState === UIState.ANIMATING) { return }
       setSelectedTile(i);
-      const tile = game.battlefield.tiles[i];
-      const minion = game.battlefield.minions[tile.minion];
-      if (minion != null) {
-        setDisplayStats({ power: minion.power, health: minion.health, movement: minion.movement });
-        if (minion.owner === playerIndex) {
-          alert("Selected your own minion")
-          const from = i;
-          const to = i + 1;
-          Rune.actions.move({ from, to });
-          setActionableTiles([]);
-        } else {
-          alert("Selected an enemy minion")
-        }
+      const tile = game.tiles[i];
+      if (tile.owner === playerIndex) {
+
       } else {
-        setDisplayStats(undefined);
+
       }
     }
   };
@@ -141,9 +130,8 @@ function App() {
 
   return (
     <>
-      <PlayerStatusBar player={enemyState} displayName={tempEnemyDisplayName} flip={true} />
-      <BattlefieldView battlefield={game.battlefield} player={playerIndex} callbacks={battlefieldCallbacks} />
-      <PlayerStatusBar player={playerState} displayName={player.displayName} flip={false} />
+      <code>{tempEnemyDisplayName}</code>
+      <BattlefieldView game={game} player={playerIndex} callbacks={battlefieldCallbacks} />
       <div className="main-action-container">
         {
           showPlayerActionBar &&

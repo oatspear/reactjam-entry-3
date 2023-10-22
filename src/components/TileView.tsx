@@ -1,48 +1,37 @@
 import './TileView.css';
-import { Minion, PlayerIndex, Tile, TileType } from '../logic.ts';
-import MinionPin from './MinionPin.tsx';
+import { PlayerIndex, Tile } from '../logic.ts';
 
 
 // Define the type for component props
 interface TileProps {
   tile: Tile;
-  minion: Minion | undefined;
   handleClick: () => void;
 }
 
 
-const TileView = ({ tile, minion, handleClick }: TileProps): JSX.Element => {
-  if (tile.type === TileType.UNPATHABLE) {
+const TileView = ({ tile, handleClick }: TileProps): JSX.Element => {
+  if (!tile.usable) {
     return (
-      <div className="tile"></div>
+      <div></div>
     );
   }
 
-  let className = "tile";
-  if (tile.type === TileType.BASE) {
-    className += " tile-base";
-  } else if (tile.type === TileType.SPAWN) {
-    className += " tile-spawn";
-  } else if (tile.type === TileType.NORMAL) {
-    className += " tile-normal";
-  }
-
+  let className = "tile tile-normal";
   if (tile.owner === PlayerIndex.PLAYER1) {
     className += " player-1";
   } else if (tile.owner === PlayerIndex.PLAYER2) {
     className += " player-2";
+  } else if (tile.owner === PlayerIndex.PLAYER3) {
+    className += " player-3";
+  } else if (tile.owner === PlayerIndex.PLAYER4) {
+    className += " player-4";
   }
 
-  if (minion == null) {
-    return (<div className={className} onClick={handleClick}></div>);
-  }
+  const total = tile.power + tile.speed + tile.technical;
 
   return (
     <div className={className} onClick={handleClick}>
-      <MinionPin minion={minion} />
-      <div className="minion-stats">
-        <span>{minion.power}</span> | <span>{minion.health}</span>
-      </div>
+      <span>{total}</span>
     </div>
   );
 };

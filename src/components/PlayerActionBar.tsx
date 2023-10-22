@@ -1,10 +1,9 @@
-import { MinionData, PlayerState } from '../logic';
+import { PlayerState } from '../logic';
 import './PlayerActionBar.css';
 
 import iconPlayerFlag from "../assets/flag-player.png";
 import iconEnemyFlag from "../assets/flag-enemy.png";
 import { useState } from 'react';
-import RecruitActionBar from './RecruitActionBar';
 
 // Define the type for component props
 interface PlayerActionBarProps {
@@ -17,12 +16,7 @@ interface PlayerActionBarProps {
 
 function renderMinions(player: PlayerState, handleSelectMinion: (i: number) => void): JSX.Element {
   return (
-    <RecruitActionBar
-      bench={player.bench}
-      graveyard={player.graveyard}
-      playerResources={player.resources}
-      onBenchMinionSelected={handleSelectMinion}
-    />
+    <div></div>
   );
 }
 
@@ -30,11 +24,6 @@ function renderMinions(player: PlayerState, handleSelectMinion: (i: number) => v
 function renderTech(player: PlayerState, handleSelectTech: (i: number) => void): JSX.Element {
   return (
     <div className="roster">
-      {
-        player.deck.spells.map((spell: number, i: number) => (
-          <div className="item" key={i} onClick={() => handleSelectTech(i)}>{i+1}</div>
-        ))
-      }
     </div>
   );
 }
